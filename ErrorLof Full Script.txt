@@ -1,0 +1,151 @@
+
+SQL Server ErrorLog Archive and Clean Script
+- [ErrorLog_Archive]  Log Database
+- [dbo].[SQLTR_MS_SQLAgentlog]  Engine Log Tables
+- [dbo].[SQLTR_MS_SQLerrorlog]  Agent Log Tables
+- [sqlTr_AgentRun]  Job Owner User 
+- [SQLTURKIYE_ErrorLogArchive_Daily]  Job (Daily 0100)
+SQL TURKIYE PLATFORM
+www.sqlturkiye.com
+www.yusufkahveci.com
+Creted By  Yusuf Kahveci
+@2016 December
+yusufkahveci@sqlturkiye.com
+
+
+-- I  Database And Table Create Script
+
+-- CREATE ErrorLog Archive Databace
+CREATE DATABASE ErrorLog_Archive;
+GO
+
+USE ErrorLog_Archive;
+GO
+
+-- CREATE MS SQL ErrorLog Archive Table
+CREATE TABLE [dbo].[SQLTR_MS_SQLerrorlog]
+    (
+      [LogDate] [DATETIME] NULL ,
+      [ProcessInfo] [VARCHAR](10) NULL ,
+      [Text] [VARCHAR](MAX) NULL
+    )
+ON  [PRIMARY] TEXTIMAGE_ON [PRIMARY];
+
+GO
+
+USE ErrorLog_Archive;
+GO
+
+-- CREATE Agent ErrorLog Archive Table
+CREATE TABLE [dbo].[SQLTR_MS_SQLAgentlog]
+    (
+      [LogDate] [DATETIME] NULL ,
+      [ErrorLevel] [VARCHAR](10) NULL ,
+      [Text] [VARCHAR](MAX) NULL
+    )
+ON  [PRIMARY] TEXTIMAGE_ON [PRIMARY];
+
+GO
+
+----------------------------------------------------------------------------------------------
+
+-- II  User Create and Authorization Script
+
+
+
+USE [master];
+GO
+CREATE LOGIN [sqlTr_AgentRun] WITH PASSWORD=N'XyZ987_', DEFAULT_DATABASE=[master], CHECK_EXPIRATION=OFF, CHECK_POLICY=OFF;
+GO
+
+USE [msdb];
+GO
+CREATE USER [sqlTr_AgentRun] FOR LOGIN [sqlTr_AgentRun];
+GO
+USE [msdb];
+GO
+EXEC sp_addrolemember 'SQLAgentUserRole', 'sqlTr_AgentRun';
+GO
+-- [ErrorLog_Archive] Database & User ([db_datareader],[db_datawriter])
+
+USE [ErrorLog_Archive];
+GO
+CREATE USER [sqlTr_AgentRun] FOR LOGIN [sqlTr_AgentRun];
+GO
+USE [ErrorLog_Archive];
+GO
+ALTER ROLE [db_datareader] ADD MEMBER [sqlTr_AgentRun];
+GO
+USE [ErrorLog_Archive];
+GO
+ALTER ROLE [db_datawriter] ADD MEMBER [sqlTr_AgentRun];
+GO
+------------------------------------------------------------------------------------------------------
+
+-- III. Create Job Script  Job Name  SQLTURKIYE_ErrorLogArchive_Daily , Schedule  0100
+
+Job 'ýmýzý oluþturuyoruz.(Her gece 0100 da çalýþacak þekilde)
+
+USE [msdb];
+GO
+DECLARE @jobId BINARY(16);
+EXEC msdb.dbo.sp_add_job @job_name = N'SQLTURKIYE_ErrorLogArchive_Daily',
+    @enabled = 1, @notify_level_eventlog = 0, @notify_level_email = 2,
+    @notify_level_netsend = 2, @notify_level_page = 2, @delete_level = 0,
+    @category_name = N'[Uncategorized (Local)]',
+    @owner_login_name = N'sqlTr_AgentRun', @job_id = @jobId OUTPUT;
+SELECT  @jobId;
+GO
+EXEC msdb.dbo.sp_add_jobserver @job_name = N'SQLTURKIYE_ErrorLogArchive_Daily',
+    @server_name = N'TC-LATESTDB01';
+GO
+USE [msdb];
+GO
+-- yusufkahveci@sqlturkiye.com
+EXEC msdb.dbo.sp_add_jobstep @job_name = N'SQLTURKIYE_ErrorLogArchive_Daily',
+    @step_name = N'SQLTURKIYE_ErrorLogArchive_Daily_Step', @step_id = 1,
+    @cmdexec_success_code = 0, @on_success_action = 1, @on_fail_action = 2,
+    @retry_attempts = 0, @retry_interval = 0, @os_run_priority = 0,
+    @subsystem = N'TSQL',
+    @command = N'-- INSERT MS SQL ErrorLog Archive Script
+INSERT  INTO SQLTR_MS_SQLerrorlog
+        EXEC sp_readerrorlog;
+
+GO 
+-- DELETE MS SQL ErrorLog  Script
+EXEC msdb.dbo.sp_cycle_errorlog;
+GO
+
+-- CREATE Agent ErrorLog Archive Script
+INSERT  INTO SQLTR_MS_SQLAgentlog
+        EXEC sp_readerrorlog -1, 2;
+GO
+-- DELETE Agent ErrorLog  Script
+EXEC msdb.dbo.sp_cycle_agent_errorlog; 
+GO
+', @database_name = N'ErrorLog_Archive', @flags = 0;
+GO
+-- www.sqlturkiye.com
+USE [msdb];
+GO
+EXEC msdb.dbo.sp_update_job @job_name = N'SQLTURKIYE_ErrorLogArchive_Daily',
+    @enabled = 1, @start_step_id = 1, @notify_level_eventlog = 0,
+    @notify_level_email = 2, @notify_level_netsend = 2, @notify_level_page = 2,
+    @delete_level = 0, @description = N'',
+    @category_name = N'[Uncategorized (Local)]',
+    @owner_login_name = N'sqlTr_AgentRun', @notify_email_operator_name = N'',
+    @notify_netsend_operator_name = N'', @notify_page_operator_name = N'';
+GO
+USE [msdb];
+GO
+-- www.yusufkahveci.com
+DECLARE @schedule_id INT;
+EXEC msdb.dbo.sp_add_jobschedule @job_name = N'SQLTURKIYE_ErrorLogArchive_Daily',
+    @name = N'SQLTURKIYE_ErrorLogArchive_Daily_Schedule', @enabled = 1,
+    @freq_type = 4, @freq_interval = 1, @freq_subday_type = 1,
+    @freq_subday_interval = 0, @freq_relative_interval = 0,
+    @freq_recurrence_factor = 1, @active_start_date = 20161221,
+    @active_end_date = 99991231, @active_start_time = 10000,
+    @active_end_time = 235959, @schedule_id = @schedule_id OUTPUT;
+SELECT  @schedule_id;
+GO
